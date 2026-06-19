@@ -1,4 +1,4 @@
-# 🌐 FinBridge Azure Network Operations — AI-Augmented Workflow
+# 🌐 FinBridge Capstone Project Using AI
 
 > **Network Reliability Engineering** | Azure East US | Engineer: **tinkuxd** | 2026-06-19
 
