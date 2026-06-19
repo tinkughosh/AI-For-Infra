@@ -4,8 +4,8 @@ Fault + Restore Scripts — Confirmation Statement
 restore.ps1 was written first and tested against the live NSG before fault-inject.ps1 was executed.
 
 Scripts:
-  scripts/restore.ps1      — removes LabBlock8080 deny rule, resets AllowAppToBackend to correct source
-  scripts/fault-inject.ps1 — adds LabBlock8080 at priority 100, moves AllowAppToBackend to priority 300
+  scripts/restore.ps1      — removes LabBlock8080 deny rule, resets AllowAppToBackend to priority 200 / source 10.10.1.0/24
+  scripts/fault-inject.ps1 — adds LabBlock8080 Deny Icmp at priority 150, moves AllowAppToBackend to priority 300
 
 === RESTORE SCRIPT TEST RUNS — POC (Graded Gate) ===
 =============================================
