@@ -1,45 +1,47 @@
-# 🤖 FinBridge — AI-Assisted Infrastructure Workflow
+# 🌐 FinBridge Azure Network Operations — AI-Augmented Workflow
 
-> **Capstone Project** | Network Tower | Participant: **tinkuxd** | Azure East US | 2026-06-19
+> **Network Reliability Engineering** | Azure East US | Engineer: **tinkuxd** | 2026-06-19
 
-[![Phase 1](https://img.shields.io/badge/Phase%201-Build%20IaC-blue?style=flat-square)](#phase-1--build)
-[![Phase 2](https://img.shields.io/badge/Phase%202-Arm-orange?style=flat-square)](#phase-2--arm)
-[![Phase 3](https://img.shields.io/badge/Phase%203-Break%20%26%20Detect-red?style=flat-square)](#phase-3--break--detect)
-[![Phase 4](https://img.shields.io/badge/Phase%204-Diagnose%20%26%20Resolve-green?style=flat-square)](#phase-4--diagnose--resolve)
-
----
-
-## 📋 Project Overview
-
-FinBridge is migrating a workload onto Azure. This project demonstrates an **AI-augmented Ops workflow** — building infrastructure from scratch, deliberately breaking it, diagnosing it like a real production incident, and producing a handover pack a receiving Ops team can act on immediately.
-
-**Tower chosen:** 🌐 Network — NSG connectivity failure  
-**Problem simulated:** A stray Deny rule inserted at the wrong priority silently blocks east-west ICMP between application and backend tiers  
-**AI role:** Proposal, interpretation, and drafting — human engineer validates and decides at every step
+[![IaC](https://img.shields.io/badge/IaC-Terraform%20azurerm%20~3.0-623CE4?style=flat-square&logo=terraform)](#️-infrastructure-as-code)
+[![Fault Injection](https://img.shields.io/badge/Fault%20Injection-NSG%20Misconfiguration-orange?style=flat-square)](#-fault-injection--recovery)
+[![Evidence](https://img.shields.io/badge/Evidence-Monitor%20Log%20%2B%20Screenshots-blue?style=flat-square)](#-incident-evidence)
+[![RCA](https://img.shields.io/badge/RCA-Completed-green?style=flat-square)](#-root-cause-analysis)
 
 ---
 
-## 🗺️ Phase Outline
+## 📋 What This Is
+
+This repository documents an end-to-end **AI-assisted network operations workflow** for the FinBridge Azure environment. It covers infrastructure provisioning, controlled fault simulation, real-time detection, AI-assisted diagnosis, and a full Root Cause Analysis — exactly the workflow an on-call ops team would follow for a production NSG incident.
+
+| Area | Detail |
+|------|--------|
+| 🌐 **Fault type** | NSG priority conflict — Deny rule silently shadows an Allow rule |
+| 🎯 **Impact** | East-west ICMP blocked between app and backend subnets |
+| 🛡️ **Unaffected** | SSH management access throughout the incident |
+| 🤖 **AI role** | Proposes, drafts, and interprets — engineer validates and executes every step |
+
+---
+
+## 🗺️ Project Milestones
 
 ```
-Phase 1 ──────── Phase 2 ──────── Phase 3 ──────── Phase 4
-  Build            Arm            Break & Detect    Diagnose & Resolve
-  (IaC)       (Fault+Restore)    (Evidence)           (RCA)
-   ✅               ✅                ✅                  ✅
+  Provision ──────── Arm ──────── Incident Simulation ──────── Diagnose & Close
+  (IaC)         (Scripts)            (Evidence)                    (RCA)
+     ✅               ✅                  ✅                            ✅
 ```
 
-| # | Phase | Goal | Status |
-|---|-------|------|--------|
-| 1 | 🏗️ **Build** | Terraform IaC through 4 gates | ✅ Complete |
-| 2 | 🔧 **Arm** | Fault + restore scripts (restore first) | ✅ Complete |
-| 3 | 💥 **Break & Detect** | Trigger fault, capture timestamped evidence | ✅ Complete |
-| 4 | 🔍 **Diagnose & Resolve** | AI triage → RCA → handover pack | ✅ Complete |
+| Milestone | Objective | Outcome |
+|-----------|-----------|---------|
+| 🏗️ **Provision** | Terraform IaC reviewed through 4 quality gates before deploy | All 4 gates passed |
+| 🔧 **Arm** | Paired fault + restore scripts — restore proven before fault runs | Restore tested & verified |
+| 💥 **Simulate** | Fault triggered, automated monitor detects impact in real time | 2 min 13 sec outage captured |
+| 🔍 **Diagnose & Close** | AI triage → root cause confirmed → remediation → RCA delivered | Full handover pack produced |
 
 ---
 
-## 🔄 Workflow — How It Was Built
+## 🔄 Workflow
 
-### 🏗️ Phase 1 — Build the Infrastructure
+### 🏗️ Provision the Infrastructure
 
 **1️⃣ AI generates the Terraform code**
 
@@ -85,7 +87,7 @@ Priority  Name               Access  Protocol
 
 ---
 
-### 🔧 Phase 2 — Arm (Fault + Restore Scripts)
+### 🔧 Arm — Fault Injection & Recovery Scripts
 
 **Restore script written and tested FIRST — this is the graded gate.**
 
@@ -138,7 +140,7 @@ Engineer adjusted: priority changed 100→150 after discovering AllowSSH already
 
 ---
 
-### 💥 Phase 3 — Break & Detect
+### 💥 Incident Simulation — Break & Detect
 
 **1️⃣ Monitor script set up on vm-app**
 
@@ -187,7 +189,7 @@ Priority  Name               Access  Protocol
 
 ---
 
-### 🔍 Phase 4 — Diagnose & Resolve
+### 🔍 Diagnose & Resolve
 
 **1️⃣ AI triage prompt run against evidence**
 
@@ -228,7 +230,7 @@ Recovery time: **< 7 seconds** after restore script completed.
 
 ---
 
-## 📁 Project Structure
+## 📁 Repository Structure
 
 ```
 AI-For-Infra/
@@ -244,19 +246,19 @@ AI-For-Infra/
     │   └── cloud-init-backend.yaml           ← VM cloud-init config
     │
     ├── 🔧  scripts/
-    │   ├── restore.ps1                       ← RESTORE script (PowerShell) ← tested first
-    │   ├── fault-inject.ps1                  ← FAULT script (PowerShell)
-    │   ├── restore.sh                        ← RESTORE script (Bash)
-    │   ├── fault-inject.sh                   ← FAULT script (Bash)
-    │   ├── monitor.log                       ← Live evidence: PASS→FAIL→PASS timeline
-    │   └── script-notes.txt                  ← Graded gate: restore POC evidence
+    │   ├── restore.ps1                       ← Restore script — tested BEFORE fault injection
+    │   ├── fault-inject.ps1                  ← Fault injection script
+    │   ├── monitor.log                       ← Incident evidence: PASS → FAIL → PASS timeline
+    │   └── script-notes.txt                  ← Restore verification output (proof of testing)
     │
-    ├── 📊  gate-notes.txt                    ← Phase 1: Four-gate IaC results
-    ├── 📋  evidence-log.txt                  ← Phase 3: Timestamped incident observations
-    ├── 💬  prompt-library.txt                ← Phase 4: All AI prompts with keep/change/reject notes
-    ├── 📄  rca.txt                           ← Phase 4: Full Root Cause Analysis
-    ├── 🖼️  ping down and after fault inject evidance.PNG    ← Fault state screenshot
-    └── 🖼️  After-ping down and after fault inject evidance.PNG ← Restore screenshot
+    ├── 🖼️  evidence/
+    │   ├── fault-inject-evidence.PNG         ← Screenshot: fault state (ICMP blocked)
+    │   └── restore-evidence.PNG              ← Screenshot: post-restore (ICMP recovered)
+    │
+    ├── 📊  gate-notes.txt                    ← IaC quality gates: Lint, Dry-Run, Idempotency, Scope
+    ├── 📋  evidence-log.txt                  ← Timestamped incident observations (8 entries)
+    ├── 💬  prompt-library.txt                ← All AI prompts used — with keep/change/reject notes
+    └── 📄  rca.txt                           ← Root Cause Analysis — full handover document
 ```
 
 ---
@@ -314,4 +316,4 @@ The AI co-engineer was used at every phase — but the human engineer **validate
 
 ---
 
-*Handover pack prepared by tinkuxd · FinBridge Capstone · AI for Infrastructure Engineering Programme*
+*FinBridge Network Operations · AI-Augmented Workflow · tinkuxd · 2026-06-19*
