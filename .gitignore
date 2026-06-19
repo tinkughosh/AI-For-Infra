@@ -1,0 +1,16 @@
+# Credentials and sensitive files - DO NOT COMMIT
+GitHub-Classic-Token.txt
+Project/Azure-SP-Variables.txt
+Project/Azure Connection details.txt
+
+# Excluded per project scope
+Project/Class Notes.txt
+Project/Project Guidline.txt
+
+# Terraform state and secrets
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/tfplan
+**/plan-output.txt
