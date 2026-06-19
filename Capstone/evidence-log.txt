@@ -1,0 +1,130 @@
+Evidence Log — NSG Connectivity Failure Incident
+FinBridge Capstone · Network Tower · Participant: tinkuxd
+===========================================================
+Collected: 2026-06-19  |  Infrastructure: Azure East US
+Resource Group : rg-capstone-tinkuxd
+Affected NSG   : nsg-backend
+Affected path  : vm-app (10.10.1.10) → vm-backend (10.10.2.10) via ICMP
+===========================================================
+
+OBSERVATION 1 — Baseline established
+-------------------------------------
+Time    : 2026-06-19 10:41:38 UTC
+Where   : vm-app terminal (/opt/lab/evidence/monitor.log)
+Tool    : Custom monitor script (ping -c 1 -W 2 every 5 seconds)
+What    : Monitor started. First probe returned PASS immediately.
+          ICMP connectivity from vm-app → vm-backend confirmed healthy.
+Command : bash /opt/lab/monitor.sh
+Output  :
+  [START] Fri Jun 19 10:41:38 UTC 2026
+  10:41:38  [PASS]  ICMP reachable
+  10:41:43  [PASS]  ICMP reachable
+  (continued PASS for ~21 minutes)
+
+OBSERVATION 2 — Pre-fault NSG state verified
+---------------------------------------------
+Time    : 2026-06-19 11:00:32 – 11:00:43 UTC
+Where   : PowerShell terminal (local machine)
+Tool    : restore.ps1 (clean-state verification run)
+What    : restore.ps1 executed to confirm NSG was in clean state before fault injection.
+          LabBlock8080 deny rule: NOT FOUND (nothing to delete).
+          AllowAppToBackend confirmed at priority 200, source 10.10.1.0/24.
+NSG rules confirmed:
+  Priority  Name               Access  Protocol
+  --------  -----------------  ------  --------
+  100       AllowSSH           Allow   Tcp
+  200       AllowAppToBackend  Allow   Icmp
+  4096      DenyAllInbound     Deny    *
+
+OBSERVATION 3 — Fault injected
+--------------------------------
+Time    : 2026-06-19 ~11:03:13 UTC
+Where   : PowerShell terminal (local machine)
+Tool    : fault-inject.ps1
+What    : Script executed with 5-second countdown abort window.
+          Two changes made to nsg-backend:
+          (a) AllowAppToBackend moved from priority 200 → priority 300
+          (b) New rule LabBlock8080 created: Deny / Icmp / priority 150 /
+              source 10.10.1.0/24 / destination *
+          Result: LabBlock8080 at priority 150 now intercepts ICMP before
+          AllowAppToBackend at priority 300 can permit it.
+          Azure NSG evaluates rules lowest-priority-number first, so Deny wins.
+
+OBSERVATION 4 — Impact detected by monitor
+-------------------------------------------
+Time    : 2026-06-19 11:03:16 UTC (first FAIL)
+Where   : vm-app terminal (/opt/lab/evidence/monitor.log)
+Tool    : Monitor script
+What    : ICMP probe to 10.10.2.10 failed for the first time.
+          Transition was immediate — one probe interval (5 s) after fault.
+Output  :
+  11:03:11  [PASS]  ICMP reachable      ← last clean probe
+  11:03:16  [FAIL]  ICMP UNREACHABLE    ← fault visible
+  11:03:23  [FAIL]  ICMP UNREACHABLE
+  (continued FAIL for 2 min 18 sec)
+
+OBSERVATION 5 — NSG state during fault
+----------------------------------------
+Time    : 2026-06-19 ~11:03:30 UTC
+Where   : PowerShell terminal
+Tool    : az network nsg rule list
+What    : NSG rules captured mid-incident to confirm root cause.
+NSG rules during fault:
+  Priority  Name               Access  Protocol
+  --------  -----------------  ------  --------
+  100       AllowSSH           Allow   Tcp
+  150       LabBlock8080       Deny    Icmp      ← injected deny rule
+  300       AllowAppToBackend  Allow   Icmp      ← shadowed by rule above
+  4096      DenyAllInbound     Deny    *
+Note: SSH (TCP port 22) was NOT affected — AllowSSH at priority 100
+      remained in place. Only ICMP was blocked.
+
+OBSERVATION 6 — Sustained outage window
+-----------------------------------------
+Time    : 11:03:16 – 11:05:29 UTC
+Duration: 2 minutes 13 seconds
+Where   : monitor.log (continuous)
+What    : Every 5-second ICMP probe returned UNREACHABLE throughout the window.
+          Total failed probes: 27
+          SSH connectivity to vm-backend was unaffected (not probed but
+          rule analysis confirms TCP 22 path was clear).
+
+OBSERVATION 7 — Restore executed
+----------------------------------
+Time    : 2026-06-19 ~11:05:30 UTC
+Where   : PowerShell terminal
+Tool    : restore.ps1
+What    : Script executed. Two changes made:
+          (a) LabBlock8080 deny rule deleted from nsg-backend
+          (b) AllowAppToBackend reset to priority 200, source 10.10.1.0/24
+          Restore completed successfully. No errors.
+
+OBSERVATION 8 — Recovery confirmed by monitor
+----------------------------------------------
+Time    : 2026-06-19 11:05:36 UTC (first PASS after restore)
+Where   : vm-app terminal (/opt/lab/evidence/monitor.log)
+Tool    : Monitor script
+What    : ICMP probe returned PASS within one probe interval of restore completing.
+Output  :
+  11:05:29  [FAIL]  ICMP UNREACHABLE    ← last failed probe
+  11:05:36  [PASS]  ICMP reachable      ← recovery confirmed
+  11:05:41  [PASS]  ICMP reachable
+  11:05:46  [PASS]  ICMP reachable
+  (continued PASS — baseline restored)
+
+===========================================================
+SUMMARY OF EVIDENCE COLLECTED
+===========================================================
+Item                          Source                      Stored
+----------------------------  --------------------------  --------------------------------
+Monitor log (full)            vm-app:/opt/lab/evidence/   Capstone/scripts/monitor.log
+Fault screenshot              Local PowerShell terminal   Capstone/ping down...PNG
+Restore screenshot            Local PowerShell terminal   Capstone/After-ping down...PNG
+Restore POC notes             Local PowerShell terminal   Capstone/scripts/script-notes.txt
+NSG rule snapshots            Azure CLI output            Captured in this log (above)
+
+Incident window  : 11:03:16 – 11:05:29 UTC (2 min 13 sec)
+Impact           : ICMP between app and backend subnets fully blocked
+Non-impact       : SSH management access unaffected throughout
+Recovery time    : < 10 seconds after restore script completed
+===========================================================
