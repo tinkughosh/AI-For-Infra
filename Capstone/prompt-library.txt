@@ -1,0 +1,391 @@
+Prompt Library â€” AI-Assisted Infrastructure Workflow
+FinBridge Capstone Â· Network Tower Â· Participant: tinkuxd
+===========================================================
+Purpose : Records the actual prompts used with the AI co-engineer
+          throughout all four phases, with notes on what was kept,
+          changed, or rejected from each AI output.
+===========================================================
+
+-----------------------------------------------------------
+PHASE 1 â€” BUILD (Terraform IaC)
+-----------------------------------------------------------
+
+PROMPT P1-01
+Topic   : Initial Terraform scaffolding
+Used at : Phase 1 start
+Prompt  :
+  "Write Terraform for Azure: resource group, VNet with two subnets
+   (app 10.10.1.0/24 and backend 10.10.2.0/24), two NSGs, two Linux VMs
+   with public IPs and password authentication. Region eastus. Name
+   resources with participant prefix tinkuxd. Use azurerm ~3.0."
+
+AI output summary :
+  - Produced full main.tf with RG, VNet, subnets, NSGs, public IPs, NICs, VMs
+  - Used azurerm_linux_virtual_machine with disable_password_authentication = false
+  - Added os_disk with StandardSSD_LRS
+
+What I kept    : Full structure, naming convention, resource ordering
+What I changed : Added specific private IP addresses (10.10.1.10, 10.10.2.10)
+                 using private_ip_address_allocation = "Static"
+                 Changed VM size to Standard_B1ms (cost-appropriate for lab)
+What I rejected: AI initially suggested SSH key auth â€” switched to password
+                 auth to match lab requirements (password auth, value supplied via env var)
+
+-----------------------------------------------------------
+
+PROMPT P1-02
+Topic   : NSG rule design for backend subnet
+Used at : Phase 1 â€” NSG configuration
+Prompt  :
+  "Design NSG rules for nsg-backend that: allows SSH (TCP 22) from anywhere,
+   allows ICMP from the app subnet (10.10.1.0/24) only, and denies all
+   other inbound traffic. Use specific priorities."
+
+AI output summary :
+  - AllowSSH: priority 100, TCP, port 22, source *
+  - AllowAppToBackend: priority 200, ICMP, source 10.10.1.0/24
+  - DenyAllInbound: priority 4096, *, source *
+
+What I kept    : All three rules exactly as proposed â€” priority spacing,
+                 protocol choices, and source restrictions were all correct
+What I changed : Nothing â€” AI output was used verbatim in main.tf
+What I rejected: N/A
+
+-----------------------------------------------------------
+
+PROMPT P1-03
+Topic   : Terraform four-gate review
+Used at : Phase 1 â€” before terraform apply
+Prompt  :
+  "Review this Terraform plan output and check it against four gates:
+   Lint (no syntax errors), Dry-Run (plan shows expected resources),
+   Idempotency (second plan shows no changes), Bounded Scope (only
+   expected resources, no surprises). Summarise pass/fail for each gate."
+
+AI output summary :
+  - Confirmed lint clean (terraform validate passed)
+  - Counted 12 resources to add, matched expected scope
+  - Flagged that idempotency must be verified after first apply
+  - Noted admin_password was marked sensitive and not shown in plan (correct)
+
+What I kept    : Gate framework and pass/fail structure for gate-notes.txt
+What I changed : Ran actual terraform validate and apply to get real results
+                 instead of relying on AI assessment alone
+What I rejected: AI suggested adding a random_id resource for unique naming â€”
+                 not needed, participant prefix is sufficient
+
+-----------------------------------------------------------
+
+PHASE 2 â€” ARM (Fault + Restore Scripts)
+-----------------------------------------------------------
+
+PROMPT P2-01
+Topic   : Restore script design
+Used at : Phase 2 â€” restore.ps1 creation (written before fault script)
+Prompt  :
+  "Write a PowerShell script that restores nsg-backend to a clean state.
+   It should: check if a rule named LabBlock8080 exists and delete it if
+   found, then reset AllowAppToBackend to priority 200 with source
+   10.10.1.0/24. Use az CLI commands. Add clear section headers and
+   timestamps. Resource group is rg-capstone-tinkuxd."
+
+AI output summary :
+  - Used az network nsg rule show to detect the deny rule
+  - Used $LASTEXITCODE to branch delete/skip logic
+  - Added az network nsg rule update for the AllowAppToBackend reset
+  - Included formatted header banner and completion message
+
+What I kept    : Overall structure, $LASTEXITCODE detection logic, banner format
+What I changed : Removed PowerShell backtick line continuations (caused parse
+                 errors) â€” rewrote long az commands as single lines
+                 Fixed az query strings by assigning to $query variable first
+                 to prevent PowerShell misinterpreting {key:value} syntax
+What I rejected: AI used Write-Output for the NSG rule table â€” replaced with
+                 direct az command output piped through --output table
+
+-----------------------------------------------------------
+
+PROMPT P2-02
+Topic   : Fault injection script design
+Used at : Phase 2 â€” fault-inject.ps1 creation
+Prompt  :
+  "Write a PowerShell fault injection script for nsg-backend. It should:
+   add a countdown with Ctrl+C abort option, update AllowAppToBackend to
+   priority 300, then add a new Deny ICMP rule called LabBlock8080 at
+   priority 150 (source 10.10.1.0/24). Show the final NSG state."
+
+AI output summary :
+  - 5-second countdown loop with [Abort] messaging
+  - az network nsg rule update for priority change
+  - az network nsg rule create for deny rule
+  - Final az network nsg rule list to confirm state
+
+What I kept    : Countdown logic, two-step injection sequence, final listing
+What I changed : Priority for LabBlock8080 changed from 100 â†’ 150 after
+                 discovering AllowSSH already occupies priority 100
+                 (Azure returned SecurityRuleConflict error on first attempt)
+What I rejected: AI initially set LabBlock8080 at priority 100 â€” rejected
+                 because it conflicted with AllowSSH; corrected to 150
+
+-----------------------------------------------------------
+
+PHASE 3 â€” BREAK & DETECT
+-----------------------------------------------------------
+
+PROMPT P3-01
+Topic   : Monitor script for connectivity detection
+Used at : Phase 3 â€” vm-app setup
+Prompt  :
+  "Write a bash script that monitors ICMP connectivity from vm-app to
+   vm-backend (10.10.2.10) every 5 seconds. Log each result with a
+   timestamp and [PASS] or [FAIL] label. Append to a log file at
+   /opt/lab/evidence/monitor.log. Use tee so output also appears on screen."
+
+AI output summary :
+  - while true loop with ping -c 1 -W 2
+  - Timestamp via date "+%H:%M:%S"
+  - tee -a $LOG for simultaneous screen + file output
+  - Clean [PASS]/[FAIL] labels
+
+What I kept    : Entire script â€” worked exactly as designed
+What I changed : Log path adjusted to /opt/lab/evidence/monitor.log
+                 (AI suggested /tmp/monitor.log)
+What I rejected: N/A
+
+-----------------------------------------------------------
+
+-----------------------------------------------------------
+PHASE 4 -- DIAGNOSE & RESOLVE
+-----------------------------------------------------------
+
+PROMPT P4-01
+Topic   : AI triage -- initial incident analysis from evidence
+Used at : Phase 4 -- immediately after fault was detected and evidence collected
+Prompt  :
+  You are a senior infrastructure on-call engineer.
+
+  A production incident has occurred in the FinBridge Azure environment.
+  Analyse ALL the evidence below and answer:
+
+  1. FIRST EVENT: What was the first evidence of the incident by timestamp?
+  2. ROOT CAUSE: State the root cause in one sentence.
+  3. EVIDENCE CHAIN: List the evidence items that confirm your root cause.
+     For each: evidence item -> what it shows -> why it supports root cause.
+  4. BLAST RADIUS: Which services are currently affected?
+  5. IMMEDIATE ACTION: What is the fastest action to restore service?
+  6. 5-WHY: Produce a 5-Why analysis anchored to specific evidence items.
+  7. TIMELINE: From first event to current state.
+
+  Constraints:
+    - Only use evidence provided -- no assumptions
+    - Every statement must reference a specific evidence item
+    - Flag any evidence that contradicts your hypothesis
+
+  --- EVIDENCE ---
+  [monitor.log extract -- last [PASS] at 11:03:11, first [FAIL] at 11:03:16,
+   27 consecutive FAIL probes, [PASS] resumes at 11:05:36]
+
+  NSG rules during fault:
+  Priority  Name               Access  Protocol
+  100       AllowSSH           Allow   Tcp
+  150       LabBlock8080       Deny    Icmp
+  300       AllowAppToBackend  Allow   Icmp
+  4096      DenyAllInbound     Deny    *
+
+AI output summary :
+  - Identified LabBlock8080 at priority 150 as root cause -- matched hypothesis
+  - 5-Why chain: ICMP blocked -> deny rule priority lower than allow rule ->
+    rule inserted at wrong priority -> no priority band policy -> no IaC control
+  - Blast radius: only ICMP east-west; SSH unaffected (confirmed correct)
+  - Immediate action: delete LabBlock8080 rule (exact az CLI command provided)
+  - Evidence chain correctly cited monitor.log timestamps and NSG rule table
+
+What I kept    : Full triage structure -- 5-Why, blast radius, evidence chain
+                 Immediate action command was correct and used verbatim
+What I changed : Timeline section -- expanded with exact timestamps from
+                 monitor.log rather than AI's approximate version
+What I rejected: AI suggested checking Azure Activity Log as FIRST action --
+                 not needed here as NSG rule list already confirmed root cause
+
+-----------------------------------------------------------
+
+PROMPT P4-02
+Topic   : Runbook step identification
+Used at : Phase 4 -- after triage, before executing remediation
+Prompt  :
+  Our approved NSG connectivity runbook:
+    Step 1: Confirm failure -- ping -c 4 10.10.2.10 from vm-app
+    Step 2: Check NSG deny rules -- az network nsg rule list --nsg-name nsg-backend
+    Step 3: Check Activity Log for recent NSG changes
+    Step 4a: If deny rule found -- delete it (requires approval)
+    Step 4b: If no deny rule -- check NIC effective security rules
+    Step 5: Validate recovery -- ping -c 4 10.10.2.10 from vm-app
+    Step 6: Confirm monitor shows [PASS] resumed
+
+  Which step are we at given this evidence, and what is the exact command
+  for the next step?
+
+  --- EVIDENCE ---
+  [monitor.log showing sustained FAIL 11:03:16 to 11:05:29]
+  [NSG rule list showing LabBlock8080 Deny Icmp at priority 150]
+
+AI output summary :
+  - Correctly placed us at Step 4a -- deny rule confirmed, ready to execute
+  - Provided exact az network nsg rule delete command for the next step
+  - Confirmed steps 1-3 were already satisfied by the evidence collected
+
+What I kept    : Step placement and exact remediation command
+What I changed : Nothing -- AI correctly identified the runbook position
+What I rejected: N/A
+
+-----------------------------------------------------------
+
+PROMPT P4-03
+Topic   : Safest fix rubric -- evaluating remediation options
+Used at : Phase 4 -- before executing the fix
+Prompt  :
+  Active incident: ICMP connectivity failure between vm-app (10.10.1.10)
+  and vm-backend (10.10.2.10) in Azure FinBridge environment.
+  Root cause confirmed: NSG rule 'LabBlock8080' at priority 150 denies
+  ICMP from 10.10.1.0/24, overriding 'AllowAppToBackend' at priority 300.
+
+  Evaluate these three proposed fixes using the Safest Fix Rubric:
+    Option A: Restart both VMs (vm-app and vm-backend)
+    Option B: Delete the LabBlock8080 NSG deny rule
+    Option C: Change AllowAppToBackend priority from 300 to 50 to outrank the deny
+
+  For each option:
+    Restores service: Yes / No / Partially -- explain
+    Blast radius: what new problems could this fix cause
+    Reversible: Yes / No
+    Confidence: 0-100% with reasoning
+
+  Recommend one option and provide the exact Azure CLI command to execute it.
+
+AI output summary :
+  - Option A: No -- VM restart does not affect NSG rules (0% confidence)
+  - Option B: Yes -- removes root cause cleanly (99% confidence, recommended)
+  - Option C: Partially -- creates new priority conflict risk (60% confidence)
+  - Recommended Option B with exact az network nsg rule delete command
+
+What I kept    : Recommended option and exact CLI command used verbatim
+What I changed : Nothing -- evaluation was correct and well-reasoned
+What I rejected: Option C -- AI correctly identified it as creating a new
+                 priority conflict risk; AI's own reasoning rejected it
+
+-----------------------------------------------------------
+
+PROMPT P4-04
+Topic   : Post-incident report (full RCA document)
+Used at : Phase 4 -- after recovery confirmed
+Prompt  :
+  You are a senior infrastructure engineer writing a post-incident report.
+
+  Write a complete post-incident report for the FinBridge NSG connectivity
+  incident. Use ONLY the evidence below -- every factual claim must reference
+  a specific evidence item. Use exact timestamps throughout.
+
+  Include these sections:
+  1. INCIDENT SUMMARY (one paragraph)
+     What happened, when, which services were affected, customer impact, duration.
+  2. INCIDENT TIMELINE
+     Format: HH:MM:SS | Event | Actor | Customer impact
+     Include: trigger, first detection, evidence collection,
+     AI diagnosis, remediation command, recovery confirmed.
+  3. ROOT CAUSE (one sentence + 5-Why)
+     Each 'why' must cite a specific evidence item.
+  4. CONTRIBUTING FACTORS
+     Factors that amplified impact or delayed detection.
+     NOT the root cause -- secondary factors only.
+  5. IMMEDIATE REMEDIATION
+     Exact steps taken, exact commands run, who ran them.
+  6. PREVENTIVE ACTIONS
+     Format: Action | Owner | Due date | Priority
+     Minimum 4 items. Must be specific and actionable.
+  7. LESSONS LEARNED
+     What reduced TTD? What would have reduced it further?
+     What would have reduced TTR?
+     What monitoring gap did this expose?
+
+  --- INCIDENT EVIDENCE ---
+  [monitor.log -- full incident window 11:03:11 to 11:05:41]
+  [NSG rule list -- captured during fault showing LabBlock8080 at priority 150]
+  [restore.ps1 output -- confirms remediation steps and completion at 11:05:43]
+
+  --- INCIDENT METRICS ---
+  Fault injected    : ~11:03:13
+  First FAIL        :  11:03:16  (detection lag: ~3 seconds)
+  Last FAIL         :  11:05:29
+  Recovery PASS     :  11:05:36
+  Total duration    :  2 minutes 23 seconds
+
+AI output summary :
+  - Produced all 7 sections with exact timestamps from monitor.log
+  - 5-Why chain correctly anchored to NSG rule table evidence
+  - Preventive actions: IaC-only changes, priority band policy, NSG Flow Logs, CI plan gate
+  - Lessons Learned identified absence of NSG change alert as key monitoring gap
+
+What I kept    : All 7 sections -- used as direct basis for rca.txt
+What I changed : Section 5 (Immediate Remediation) -- added exact az CLI commands
+                 actually run, not just descriptions
+                 Section 3 (Root Cause 5-Why) -- replaced AI's generic version with
+                 one that cites specific evidence items (rule table, monitor timestamps)
+What I rejected: Section 7 (Lessons Learned) -- AI produced generic bullet points
+                 not grounded in this incident; rewrote using actual detection lag
+                 (3 seconds) and recovery time (6 seconds) from monitor.log
+
+-----------------------------------------------------------
+
+PROMPT P4-05
+Topic   : Executive summary for leadership
+Used at : Phase 4 -- final handover deliverable
+Prompt  :
+  You are a senior infrastructure engineer.
+
+  Write an executive summary of the FinBridge NSG connectivity incident
+  so that I can share it with the CTO and CIO.
+
+  The summary must:
+  - Be non-technical -- avoid CLI commands and NSG jargon
+  - Cover: what happened, customer impact, how it was detected,
+    how long it took to fix, and what we are doing to prevent recurrence
+  - Be no longer than half a page
+  - Confirm that monitoring detected the issue automatically
+
+  --- INCIDENT FACTS ---
+  Duration   : 2 minutes 23 seconds
+  Impact     : Internal connectivity between application and backend tier
+  Detection  : Automated monitor script detected failure within 3 seconds
+  Fix        : Single configuration rule removed; no data loss; no VM restart
+  Prevention : IaC-only change control and NSG monitoring alert recommended
+
+AI output summary :
+  - Produced clean half-page summary in plain language
+  - Correctly framed detection as automated and remediation as low-risk
+  - Included a one-line prevention recommendation suitable for board visibility
+
+What I kept    : Full summary -- tone and structure appropriate for the audience
+What I changed : "network security group" changed to "firewall rule" in one place
+                 for non-technical readability
+What I rejected: AI added a cost impact paragraph -- not applicable for a
+                 2-minute internal connectivity event in a controlled lab
+
+===========================================================
+SUMMARY
+===========================================================
+Total prompts used : 10 (P1-01 through P4-05)
+Phases covered     : All four (Build, Arm, Break & Detect, Diagnose & Resolve)
+AI acceptance rate : ~82% -- most AI output used with targeted changes
+Most common change : Replacing AI's generic examples with actual evidence
+                     (timestamps, rule names, log lines) from the real incident
+Most common reject : Generic recommendations not grounded in specific evidence,
+                     and suggestions requiring out-of-scope Azure resources
+Course prompt pattern applied in Phase 4:
+  - Role declaration  : "You are a senior [role]..."
+  - Numbered questions: explicit answer format required
+  - Constraints block : evidence-only, cite sources, flag contradictions
+  - Evidence block    : "--- EVIDENCE ---" with actual collected data
+  - Runbook matching  : identify current step before executing any fix
+  - Safest Fix Rubric : evaluate options before executing remediation
+  - Full PIR format   : 7-section post-incident report with exact timestamps
+===========================================================
