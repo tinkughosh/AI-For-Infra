@@ -1,0 +1,162 @@
+Root Cause Analysis (RCA)
+FinBridge Capstone — Network Tower — NSG Connectivity Failure
+==============================================================
+Participant    : tinkuxd
+Date of Incident: 2026-06-19
+Environment    : Azure East US — rg-capstone-tinkuxd
+Severity       : Simulated / Controlled Lab Incident
+==============================================================
+
+1. PROBLEM SUMMARY
+------------------
+ICMP connectivity between vm-app (10.10.1.10) and vm-backend (10.10.2.10)
+was completely blocked for 2 minutes 13 seconds following a deliberate
+NSG misconfiguration. The fault simulated a real-world scenario where an
+operator adds an overly broad deny rule to a backend NSG without accounting
+for existing rule priorities, causing silent traffic loss for east-west
+communication between application tiers.
+
+SSH management access was not affected at any point.
+
+2. AFFECTED RESOURCES
+---------------------
+Resource                  Detail
+------------------------  ------------------------------------------
+NSG                       nsg-backend (on snet-backend, 10.10.2.0/24)
+Source VM                 vm-app — 10.10.1.10 (snet-app)
+Destination VM            vm-backend — 10.10.2.10 (snet-backend)
+Blocked protocol          ICMP (ping)
+Unaffected protocol       TCP (SSH port 22)
+
+3. TIMELINE
+-----------
+Time (UTC)       Event
+---------------  -----------------------------------------------------------
+10:41:38         Monitor script started on vm-app. Baseline ICMP PASS
+                 established — vm-app can reach vm-backend.
+
+11:00:32         restore.ps1 run to verify NSG is in clean state before
+                 fault injection. Confirmed: no LabBlock8080 rule,
+                 AllowAppToBackend at priority 200 / source 10.10.1.0/24.
+
+11:03:11         Last successful ICMP probe before fault — [PASS].
+
+~11:03:13        fault-inject.ps1 executed:
+                 (a) AllowAppToBackend updated: priority 200 → 300
+                 (b) New rule created: LabBlock8080 / Deny / Icmp /
+                     priority 150 / source 10.10.1.0/24
+
+11:03:16         First FAIL detected by monitor — ICMP UNREACHABLE.
+                 Azure NSG applied the new deny rule within ~3 seconds.
+
+11:03:16         Sustained outage begins. Every 5-second probe fails.
+– 11:05:29       Total failed probes: 27. Duration: 2 min 13 sec.
+
+~11:05:30        restore.ps1 executed:
+                 (a) LabBlock8080 deny rule deleted
+                 (b) AllowAppToBackend reset to priority 200 /
+                     source 10.10.1.0/24
+
+11:05:36         First PASS after restore — ICMP reachable again.
+                 Recovery confirmed within one probe interval (~6 sec).
+
+4. ROOT CAUSE
+-------------
+Azure NSG rules are evaluated in ascending priority order (lowest number
+first). The fault introduced rule LabBlock8080 with:
+
+  Priority : 150
+  Action   : Deny
+  Protocol : Icmp
+  Source   : 10.10.1.0/24 (app subnet)
+
+This rule was inserted between AllowSSH (priority 100) and
+AllowAppToBackend (priority 300):
+
+  Priority  Rule               Action  Protocol  Effect
+  --------  -----------------  ------  --------  -------------------------
+  100       AllowSSH           Allow   Tcp       SSH traffic passes ✓
+  150       LabBlock8080       Deny    Icmp      ICMP matched here → DENY ✗
+  300       AllowAppToBackend  Allow   Icmp      Never reached for ICMP
+  4096      DenyAllInbound     Deny    *         Default deny
+
+Because NSG rule matching stops at the first match, LabBlock8080 at
+priority 150 intercepted all ICMP from the app subnet before
+AllowAppToBackend at priority 300 could permit it.
+
+Root cause classification: NSG rule priority conflict — a deny rule
+inserted at a priority number lower than the existing allow rule for the
+same protocol and source, causing the allow rule to be permanently shadowed.
+
+5. FIX APPLIED
+--------------
+restore.ps1 applied the following changes via Azure CLI:
+
+Step 1 — Delete deny rule:
+  az network nsg rule delete \
+    --resource-group rg-capstone-tinkuxd \
+    --nsg-name nsg-backend \
+    --name LabBlock8080
+
+Step 2 — Reset allow rule to correct priority:
+  az network nsg rule update \
+    --resource-group rg-capstone-tinkuxd \
+    --nsg-name nsg-backend \
+    --name AllowAppToBackend \
+    --priority 200 \
+    --source-address-prefixes 10.10.1.0/24
+
+Post-fix NSG state:
+  Priority  Name               Access  Protocol
+  --------  -----------------  ------  --------
+  100       AllowSSH           Allow   Tcp
+  200       AllowAppToBackend  Allow   Icmp
+  4096      DenyAllInbound     Deny    *
+
+6. RECOVERY CONFIRMATION
+------------------------
+Monitor log shows ICMP probe returned [PASS] at 11:05:36 — within 6 seconds
+of restore.ps1 completing. Connectivity returned to pre-incident baseline
+with no packet loss.
+
+From /opt/lab/evidence/monitor.log:
+  11:05:29  [FAIL]  ICMP UNREACHABLE    ← last failed probe
+  11:05:36  [PASS]  ICMP reachable      ← recovery confirmed
+  11:05:41  [PASS]  ICMP reachable
+  11:05:46  [PASS]  ICMP reachable
+
+Recovery time objective (RTO) achieved: < 10 seconds after remediation.
+
+7. PREVENTIVE RECOMMENDATIONS
+------------------------------
+1. IaC-only NSG changes (immediate)
+   All NSG rule modifications must go through Terraform and a pull request
+   review. Manual az network nsg rule create commands are prohibited in
+   production. This ensures priority conflicts are caught at plan/review time.
+
+2. NSG rule priority reservation (immediate)
+   Define a priority band policy:
+     100–199  : Management rules (SSH, RDP) — reserved, change-controlled
+     200–499  : Application allow rules — reviewed by app owner
+     500–3999 : Deny rules — must not overlap with allow bands above
+     4096     : Default deny (Azure built-in)
+   Inserting a deny rule at priority 150 would violate this policy and
+   be caught in code review.
+
+3. NSG Flow Logs + alert (short term)
+   Enable NSG Flow Logs on nsg-backend and create an Azure Monitor alert
+   that fires when inbound ICMP deny events exceed 10 per minute on
+   snet-backend. This detects the impact automatically within seconds,
+   without relying on a manually run monitor script.
+
+4. Terraform plan validation in CI (short term)
+   Add a CI step (GitHub Actions) that runs terraform plan on every PR
+   and posts the diff as a PR comment. NSG rule changes would be visible
+   to reviewers before merge.
+
+==============================================================
+Document prepared by : tinkuxd with AI co-engineer (GitHub Copilot)
+AI role              : hypothesis generation, RCA drafting, command
+                       suggestions — all output validated and amended
+                       by human engineer before use.
+==============================================================
