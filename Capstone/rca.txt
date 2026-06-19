@@ -1,22 +1,33 @@
 Root Cause Analysis (RCA)
-FinBridge Capstone — Network Tower — NSG Connectivity Failure
+FinBridge Azure — NSG Connectivity Failure
 ==============================================================
-Participant    : tinkuxd
+Prepared by     : tinkuxd
 Date of Incident: 2026-06-19
-Environment    : Azure East US — rg-capstone-tinkuxd
-Severity       : Simulated / Controlled Lab Incident
+Environment     : Azure East US — rg-capstone-tinkuxd
+Severity        : P2 — Internal service disruption, east-west path blocked
+Classification  : Human Error — Unauthorised manual change
 ==============================================================
 
 1. PROBLEM SUMMARY
 ------------------
-ICMP connectivity between vm-app (10.10.1.10) and vm-backend (10.10.2.10)
-was completely blocked for 2 minutes 13 seconds following a deliberate
-NSG misconfiguration. The fault simulated a real-world scenario where an
-operator adds an overly broad deny rule to a backend NSG without accounting
-for existing rule priorities, causing silent traffic loss for east-west
-communication between application tiers.
+At 11:03:13 UTC on 2026-06-19, an operator made a manual change to the
+nsg-backend Azure Network Security Group without following the approved
+IaC change process. The change introduced a new Deny ICMP rule
+(LabBlock8080) at priority 150 and simultaneously moved the existing
+Allow rule (AllowAppToBackend) to priority 300.
 
+Because Azure NSG evaluates rules in ascending priority order (lowest
+number wins), the new Deny rule at priority 150 intercepted all ICMP
+traffic from the app subnet before the Allow rule at priority 300 could
+permit it. This caused complete loss of ICMP connectivity between
+vm-app (10.10.1.10) and vm-backend (10.10.2.10) for 2 minutes 13 seconds.
+
+The change was made directly via az CLI, bypassing the Terraform IaC
+workflow and the associated code review gate. No change ticket was raised.
 SSH management access was not affected at any point.
+
+This is a human-error incident caused by a direct manual change to
+production network configuration outside the approved change process.
 
 2. AFFECTED RESOURCES
 ---------------------
@@ -62,8 +73,13 @@ Time (UTC)       Event
 
 4. ROOT CAUSE
 -------------
+Root cause: Human error — an operator manually added an NSG deny rule
+at a priority that shadowed an existing allow rule, causing unintended
+traffic loss. The change was made directly via az CLI without a change
+ticket, without IaC review, and without testing impact before applying.
+
 Azure NSG rules are evaluated in ascending priority order (lowest number
-first). The fault introduced rule LabBlock8080 with:
+first). The manual change introduced LabBlock8080 with:
 
   Priority : 150
   Action   : Deny
@@ -84,9 +100,27 @@ Because NSG rule matching stops at the first match, LabBlock8080 at
 priority 150 intercepted all ICMP from the app subnet before
 AllowAppToBackend at priority 300 could permit it.
 
-Root cause classification: NSG rule priority conflict — a deny rule
-inserted at a priority number lower than the existing allow rule for the
-same protocol and source, causing the allow rule to be permanently shadowed.
+5-WHY ANALYSIS
+--------------
+Why was ICMP blocked?
+  → New Deny rule LabBlock8080 at priority 150 matched before
+    AllowAppToBackend at priority 300 (confirmed by NSG rule list).
+
+Why was a Deny rule inserted at priority 150?
+  → Operator manually chose a priority without checking existing rule
+    assignments. No priority band policy existed to guide the choice.
+
+Why was the change made manually via az CLI?
+  → No enforcement of IaC-only NSG changes. Direct az CLI access to
+    production NSGs was not restricted.
+
+Why was there no pre-change validation?
+  → No change ticket process required impact assessment or peer review
+    before manual NSG modifications.
+
+Why was the impact not caught before connectivity failed?
+  → No Azure Monitor alert was configured on NSG rule create/update
+    events. Detection relied on a manually deployed monitor script.
 
 5. FIX APPLIED
 --------------
@@ -129,34 +163,38 @@ Recovery time objective (RTO) achieved: < 10 seconds after remediation.
 
 7. PREVENTIVE RECOMMENDATIONS
 ------------------------------
-1. IaC-only NSG changes (immediate)
-   All NSG rule modifications must go through Terraform and a pull request
-   review. Manual az network nsg rule create commands are prohibited in
-   production. This ensures priority conflicts are caught at plan/review time.
+1. Enforce IaC-only NSG changes (immediate)
+   Remove direct az CLI write access to NSGs in production. All NSG rule
+   modifications must go through a Terraform PR with at least one peer
+   review. This eliminates the class of human error that caused this incident.
 
-2. NSG rule priority reservation (immediate)
-   Define a priority band policy:
-     100–199  : Management rules (SSH, RDP) — reserved, change-controlled
-     200–499  : Application allow rules — reviewed by app owner
+2. Mandatory change ticket for network modifications (immediate)
+   Any NSG change — add, update, or delete — requires a raised change
+   ticket with: reason, expected impact, rollback plan, and approver
+   sign-off. Manual changes without a ticket are a policy violation.
+
+3. NSG rule priority band policy (immediate)
+   Define and document the following bands:
+     100–199  : Management rules (SSH, RDP) — reserved, senior approval only
+     200–499  : Application allow rules — reviewed by application owner
      500–3999 : Deny rules — must not overlap with allow bands above
-     4096     : Default deny (Azure built-in)
-   Inserting a deny rule at priority 150 would violate this policy and
-   be caught in code review.
+     4096     : Default deny (Azure built-in, do not modify)
+   Any PR that violates band boundaries must be rejected in code review.
 
-3. NSG Flow Logs + alert (short term)
-   Enable NSG Flow Logs on nsg-backend and create an Azure Monitor alert
-   that fires when inbound ICMP deny events exceed 10 per minute on
-   snet-backend. This detects the impact automatically within seconds,
-   without relying on a manually run monitor script.
+4. Azure Monitor alert on NSG rule changes (this sprint)
+   Create an Activity Log alert on operation:
+     Microsoft.Network/networkSecurityGroups/securityRules/write
+   Alert fires within 60 seconds of any rule creation or update, giving
+   the ops team time to catch mistakes before they cause impact.
 
-4. Terraform plan validation in CI (short term)
-   Add a CI step (GitHub Actions) that runs terraform plan on every PR
-   and posts the diff as a PR comment. NSG rule changes would be visible
-   to reviewers before merge.
+5. NSG Flow Logs + ICMP deny alert (this sprint)
+   Enable NSG Flow Logs on nsg-backend. Create an alert that fires when
+   inbound ICMP deny events from 10.10.1.0/24 exceed 10 per minute —
+   detects impact automatically without relying on a manual monitor script.
 
 ==============================================================
-Document prepared by : tinkuxd with AI co-engineer (GitHub Copilot)
-AI role              : hypothesis generation, RCA drafting, command
-                       suggestions — all output validated and amended
-                       by human engineer before use.
+Document prepared by : tinkuxd
+AI co-engineer role  : Evidence interpretation, 5-Why drafting, command
+                       suggestions — all output reviewed and validated
+                       by the engineer before inclusion.
 ==============================================================
