@@ -273,107 +273,10 @@ What I changed : Nothing -- evaluation was correct and well-reasoned
 What I rejected: Option C -- AI correctly identified it as creating a new
                  priority conflict risk; AI's own reasoning rejected it
 
------------------------------------------------------------
-
-PROMPT P4-04
-Topic   : Post-incident report (full RCA document)
-Used at : Phase 4 -- after recovery confirmed
-Prompt  :
-  You are a senior infrastructure engineer writing a post-incident report.
-
-  Write a complete post-incident report for the FinBridge NSG connectivity
-  incident. Use ONLY the evidence below -- every factual claim must reference
-  a specific evidence item. Use exact timestamps throughout.
-
-  Include these sections:
-  1. INCIDENT SUMMARY (one paragraph)
-     What happened, when, which services were affected, customer impact, duration.
-  2. INCIDENT TIMELINE
-     Format: HH:MM:SS | Event | Actor | Customer impact
-     Include: trigger, first detection, evidence collection,
-     AI diagnosis, remediation command, recovery confirmed.
-  3. ROOT CAUSE (one sentence + 5-Why)
-     Each 'why' must cite a specific evidence item.
-  4. CONTRIBUTING FACTORS
-     Factors that amplified impact or delayed detection.
-     NOT the root cause -- secondary factors only.
-  5. IMMEDIATE REMEDIATION
-     Exact steps taken, exact commands run, who ran them.
-  6. PREVENTIVE ACTIONS
-     Format: Action | Owner | Due date | Priority
-     Minimum 4 items. Must be specific and actionable.
-  7. LESSONS LEARNED
-     What reduced TTD? What would have reduced it further?
-     What would have reduced TTR?
-     What monitoring gap did this expose?
-
-  --- INCIDENT EVIDENCE ---
-  [monitor.log -- full incident window 11:03:11 to 11:05:41]
-  [NSG rule list -- captured during fault showing LabBlock8080 at priority 150]
-  [restore.ps1 output -- confirms remediation steps and completion at 11:05:43]
-
-  --- INCIDENT METRICS ---
-  Fault injected    : ~11:03:13
-  First FAIL        :  11:03:16  (detection lag: ~3 seconds)
-  Last FAIL         :  11:05:29
-  Recovery PASS     :  11:05:36
-  Total duration    :  2 minutes 23 seconds
-
-AI output summary :
-  - Produced all 7 sections with exact timestamps from monitor.log
-  - 5-Why chain correctly anchored to NSG rule table evidence
-  - Preventive actions: IaC-only changes, priority band policy, NSG Flow Logs, CI plan gate
-  - Lessons Learned identified absence of NSG change alert as key monitoring gap
-
-What I kept    : All 7 sections -- used as direct basis for rca.txt
-What I changed : Section 5 (Immediate Remediation) -- added exact az CLI commands
-                 actually run, not just descriptions
-                 Section 3 (Root Cause 5-Why) -- replaced AI's generic version with
-                 one that cites specific evidence items (rule table, monitor timestamps)
-What I rejected: Section 7 (Lessons Learned) -- AI produced generic bullet points
-                 not grounded in this incident; rewrote using actual detection lag
-                 (3 seconds) and recovery time (6 seconds) from monitor.log
-
------------------------------------------------------------
-
-PROMPT P4-05
-Topic   : Executive summary for leadership
-Used at : Phase 4 -- final handover deliverable
-Prompt  :
-  You are a senior infrastructure engineer.
-
-  Write an executive summary of the FinBridge NSG connectivity incident
-  so that I can share it with the CTO and CIO.
-
-  The summary must:
-  - Be non-technical -- avoid CLI commands and NSG jargon
-  - Cover: what happened, customer impact, how it was detected,
-    how long it took to fix, and what we are doing to prevent recurrence
-  - Be no longer than half a page
-  - Confirm that monitoring detected the issue automatically
-
-  --- INCIDENT FACTS ---
-  Duration   : 2 minutes 23 seconds
-  Impact     : Internal connectivity between application and backend tier
-  Detection  : Automated monitor script detected failure within 3 seconds
-  Fix        : Single configuration rule removed; no data loss; no VM restart
-  Prevention : IaC-only change control and NSG monitoring alert recommended
-
-AI output summary :
-  - Produced clean half-page summary in plain language
-  - Correctly framed detection as automated and remediation as low-risk
-  - Included a one-line prevention recommendation suitable for board visibility
-
-What I kept    : Full summary -- tone and structure appropriate for the audience
-What I changed : "network security group" changed to "firewall rule" in one place
-                 for non-technical readability
-What I rejected: AI added a cost impact paragraph -- not applicable for a
-                 2-minute internal connectivity event in a controlled lab
-
 ===========================================================
 SUMMARY
 ===========================================================
-Total prompts used : 10 (P1-01 through P4-05)
+Total prompts used : 8 (P1-01 through P4-03)
 Phases covered     : All four (Build, Arm, Break & Detect, Diagnose & Resolve)
 AI acceptance rate : ~82% -- most AI output used with targeted changes
 Most common change : Replacing AI's generic examples with actual evidence
@@ -387,5 +290,4 @@ Course prompt pattern applied in Phase 4:
   - Evidence block    : "--- EVIDENCE ---" with actual collected data
   - Runbook matching  : identify current step before executing any fix
   - Safest Fix Rubric : evaluate options before executing remediation
-  - Full PIR format   : 7-section post-incident report with exact timestamps
 ===========================================================
