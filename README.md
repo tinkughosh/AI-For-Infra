@@ -30,12 +30,12 @@ This repository documents an end-to-end **AI-assisted network operations workflo
      ✅               ✅                  ✅                            ✅
 ```
 
-| Milestone | Objective | Outcome |
-|-----------|-----------|---------|
-| 🏗️ **Provision** | Terraform IaC reviewed through 4 quality gates before deploy | All 4 gates passed |
-| 🔧 **Arm** | Paired fault + restore scripts — restore proven before fault runs | Restore tested & verified |
-| 💥 **Simulate** | Fault triggered, automated monitor detects impact in real time | 2 min 13 sec outage captured |
-| 🔍 **Diagnose & Close** | AI triage → root cause confirmed → remediation → RCA delivered | Full handover pack produced |
+| Milestone | Objective | Outcome | Evidence |
+|-----------|-----------|---------|----------|
+| 🏗️ **Provision** | Terraform IaC reviewed through 4 quality gates before deploy | All 4 gates passed | [gate-notes.txt](Capstone/gate-notes.txt) · [terraform/](Capstone/terraform/) |
+| 🔧 **Arm** | Paired fault + restore scripts — restore proven before fault runs | Restore tested & verified | [restore.ps1](Capstone/scripts/restore.ps1) · [fault-inject.ps1](Capstone/scripts/fault-inject.ps1) · [script-notes.txt](Capstone/scripts/script-notes.txt) |
+| 💥 **Simulate** | Fault triggered, automated monitor detects impact in real time | 2 min 13 sec outage captured | [monitor.log](Capstone/scripts/monitor.log) · [evidence-log.txt](Capstone/evidence-log.txt) · [fault screenshot](Capstone/evidence/fault-inject-evidence.PNG) · [restore screenshot](Capstone/evidence/restore-evidence.PNG) |
+| 🔍 **Diagnose & Close** | AI triage → root cause confirmed → remediation → RCA delivered | Full handover pack produced | [rca.txt](Capstone/rca.txt) · [prompt-library.txt](Capstone/prompt-library.txt) |
 
 ---
 
