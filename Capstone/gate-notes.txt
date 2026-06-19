@@ -1,0 +1,18 @@
+IaC Gate Results — Capstone Network Tower
+==========================================
+
+Gate 1 — LINT
+Command : terraform fmt && terraform validate
+Result  : PASS — all files formatted, configuration valid
+
+Gate 2 — DRY-RUN
+Command : terraform plan
+Result  : PASS — plan reviewed, resources matched design (RG, VNet, 2 subnets, 2 NSGs, 2 public IPs, 2 VMs)
+
+Gate 3 — IDEMPOTENCY
+Command : terraform plan (second run after apply)
+Result  : PASS — "No changes. Your infrastructure matches the configuration."
+
+Gate 4 — BOUNDED SCOPE
+Command : terraform plan output reviewed for resource group scope
+Result  : PASS — all resources confined to rg-capstone-tinkuxd, no changes outside this scope
